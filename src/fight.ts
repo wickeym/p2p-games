@@ -80,24 +80,30 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
       <img class="qr" id="qr" width="320" height="320" alt="QR code to join the game" />
       <p class="hint" id="hint">Leave this page open. The other player scans the code or opens the link.</p>
     </section>
+    <section class="rotate" id="rotate" hidden>
+      <p>Rotate to landscape</p>
+    </section>
     <section class="stage" id="stage" hidden>
       <div class="bars">
         <div class="bar host"><span id="hp0"></span></div>
         <strong class="clock" id="clock">45</strong>
         <div class="bar guest"><span id="hp1"></span></div>
       </div>
-      <div class="arena-slot"><canvas id="arena" class="arena" width="960" height="540"></canvas></div>
-      <div class="controls">
-        <div class="stick" id="stick" aria-label="Move left or right">
-          <div class="stick-knob" id="knob"></div>
-        </div>
-        <div class="actions">
-          <button type="button" data-hold="jump" aria-label="Jump">Jump</button>
-          <button type="button" data-hold="punch" aria-label="Punch">Punch</button>
-          <button type="button" data-hold="kick" aria-label="Kick">Kick</button>
+      <div class="arena-slot">
+        <canvas id="arena" class="arena" width="960" height="540"></canvas>
+        <div class="controls">
+          <div class="stick" id="stick" aria-label="Move left or right">
+            <div class="stick-knob" id="knob"></div>
+          </div>
+          <div class="actions">
+            <button type="button" data-hold="jump" aria-label="Jump">Jump</button>
+            <button type="button" data-hold="crouch" aria-label="Crouch">Crouch</button>
+            <button type="button" data-hold="punch" aria-label="Punch">Punch</button>
+            <button type="button" data-hold="kick" aria-label="Kick">Kick</button>
+          </div>
         </div>
       </div>
-      <p class="hint keys">Arrows or WASD, J punch, K kick.</p>
+      <p class="hint keys">Arrows or WASD. Down or S crouches. J punch, K kick.</p>
       <button type="button" class="primary" id="rematch" hidden>Rematch</button>
     </section>
     <p class="foot">Signaling uses the public PeerJS broker. The host decides hits and the round.</p>
@@ -112,6 +118,7 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   const joinUrl = must(wrap.querySelector<HTMLElement>('#join-url'))
   const qr = must(wrap.querySelector<HTMLImageElement>('#qr'))
   const hint = must(wrap.querySelector<HTMLElement>('#hint'))
+  const rotate = must(wrap.querySelector<HTMLElement>('#rotate'))
   const stage = must(wrap.querySelector<HTMLElement>('#stage'))
   const stick = must(wrap.querySelector<HTMLElement>('#stick'))
   const knob = must(wrap.querySelector<HTMLElement>('#knob'))
@@ -215,7 +222,7 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
 
   for (const button of wrap.querySelectorAll<HTMLButtonElement>('[data-hold]')) {
     const key = button.dataset.hold
-    if (key !== 'jump' && key !== 'punch' && key !== 'kick') continue
+    if (key !== 'jump' && key !== 'punch' && key !== 'kick' && key !== 'crouch') continue
     const set = (down: boolean) => {
       mine()[key] = down
       button.dataset.on = down ? 'true' : 'false'
@@ -246,6 +253,8 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     f: 'punch',
     k: 'kick',
     l: 'kick',
+    arrowdown: 'crouch',
+    s: 'crouch',
   }
   const onKey = (event: KeyboardEvent, down: boolean) => {
     const key = keys[event.key.toLowerCase()]
@@ -291,9 +300,12 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
       view.facing = auth.facing
       view.health = auth.health
       view.attack = auth.attack
-      view.attackMs = auth.attackMs
-      view.stunMs = auth.stunMs
-      view.hit = auth.hit
+    view.attackMs = auth.attackMs
+    view.stunMs = auth.stunMs
+    view.hit = auth.hit
+    view.crouch = auth.crouch
+    view.attackCrouch = auth.attackCrouch
+    view.jumps = auth.jumps
     }
     return shown
   }
@@ -314,9 +326,12 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     error.hidden = !errorText
     error.textContent = errorText
     const showShare = role === 'host' && peerReady && qrReady && !connected
+    const portrait = window.innerHeight > window.innerWidth && window.innerWidth < 900
     share.hidden = !showShare
-    stage.hidden = !connected
-    rematch.hidden = !(connected && world.over)
+    rotate.hidden = !connected || !portrait
+    stage.hidden = !connected || portrait
+    rematch.hidden = !(connected && !portrait && world.over)
+    app.dataset.orient = portrait ? 'portrait' : 'landscape'
     const view = role === 'guest' ? follow(world) : world
     hp0.style.width = `${view.fighters[0].health}%`
     hp1.style.width = `${view.fighters[1].health}%`
@@ -329,6 +344,8 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     app.dataset.over = view.over ? 'true' : 'false'
     const held = mine()
     app.dataset.move = held.left ? 'left' : held.right ? 'right' : 'none'
+    app.dataset.jumps0 = String(view.fighters[0].jumps)
+    app.dataset.crouch0 = view.fighters[0].crouch ? 'true' : 'false'
     app.dataset.pose0 = poseOf(view.fighters[0])
     app.dataset.pose1 = poseOf(view.fighters[1])
     app.dataset.swing0 = String(swingOf(view.fighters[0]))
@@ -499,6 +516,8 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   const blockGesture = (event: Event) => {
     if (document.documentElement.classList.contains('fight-lock')) event.preventDefault()
   }
+  const onResize = () => paint()
+  window.addEventListener('resize', onResize)
   document.addEventListener('touchmove', blockScroll, { passive: false })
   document.addEventListener('gesturestart', blockGesture)
 
@@ -506,6 +525,7 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     window.cancelAnimationFrame(raf)
     window.removeEventListener('keydown', keyDown)
     window.removeEventListener('keyup', keyUp)
+    window.removeEventListener('resize', onResize)
     document.removeEventListener('touchmove', blockScroll)
     document.removeEventListener('gesturestart', blockGesture)
     setLock(false)
@@ -518,10 +538,12 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
 }
 
 function poseOf(fighter: Fighter): string {
+  const low = fighter.attack !== 0 ? fighter.attackCrouch : fighter.crouch
   if (fighter.stunMs > 0) return 'hurt'
-  if (fighter.attack === 1) return 'punch'
-  if (fighter.attack === 2) return 'kick'
-  if (fighter.y < GROUND - 2) return 'jump'
+  if (fighter.attack === 1) return low ? 'crouch-punch' : 'punch'
+  if (fighter.attack === 2) return low ? 'crouch-kick' : 'kick'
+  if (fighter.y < GROUND - 2) return fighter.jumps >= 2 ? 'double-jump' : 'jump'
+  if (fighter.crouch) return 'crouch'
   if (Math.abs(fighter.vx) > 20) return 'walk'
   return 'idle'
 }
@@ -541,7 +563,14 @@ function legOf(fighter: Fighter): number {
 }
 
 function inputDiffers(a: Input, b: Input): boolean {
-  return a.left !== b.left || a.right !== b.right || a.jump !== b.jump || a.punch !== b.punch || a.kick !== b.kick
+  return (
+    a.left !== b.left ||
+    a.right !== b.right ||
+    a.jump !== b.jump ||
+    a.punch !== b.punch ||
+    a.kick !== b.kick ||
+    a.crouch !== b.crouch
+  )
 }
 
 function failCanvas(): CanvasRenderingContext2D {
@@ -561,19 +590,25 @@ function limb(progress: number): number {
 function drawFighter(ctx: CanvasRenderingContext2D, fighter: Fighter, color: string): void {
   const dir = fighter.facing
   const grounded = fighter.y >= GROUND - 2
+  const crouched = fighter.crouch && grounded
+  const lowAttack = fighter.attack !== 0 && fighter.attackCrouch
   const hurt = fighter.stunMs > 0 ? fighter.stunMs / STUN_MS : 0
   const lean = -dir * hurt * 28
-  const walking = grounded && Math.abs(fighter.vx) > 20 && fighter.attack !== 2 && hurt === 0
-  const step = walking ? Math.sin(fighter.x / 18) * 20 : 0
+  const walking = grounded && !crouched && Math.abs(fighter.vx) > 20 && fighter.attack !== 2 && hurt === 0
+  const step = walking ? Math.sin(fighter.x / 18) * 20 : crouched ? 8 : 0
   const air = grounded ? 0 : Math.max(-1, Math.min(1, -fighter.vy / 700))
   const punch = fighter.attack === 1 ? limb(1 - fighter.attackMs / PUNCH_MS) : 0
   const kick = fighter.attack === 2 ? limb(1 - fighter.attackMs / KICK_MS) : 0
   const hipX = fighter.x + lean * 0.35
-  const hipY = fighter.y - (grounded ? 50 : 40 + air * 6)
+  const hipY = fighter.y - (crouched ? 28 : grounded ? 50 : 40 + air * 6)
   const shoulderX = fighter.x + lean
-  const shoulderY = fighter.y - (grounded ? 100 : 92)
+  const shoulderY = fighter.y - (crouched ? 56 : grounded ? 100 : 92)
   const headX = fighter.x + lean * 1.25
-  const headY = fighter.y - (grounded ? 126 : 118)
+  const headY = fighter.y - (crouched ? 74 : grounded ? 126 : 118)
+  const punchReach = lowAttack ? 36 : 62
+  const punchLift = lowAttack ? 8 : 40
+  const kickReach = lowAttack ? 40 : 74
+  const kickLift = lowAttack ? 10 : 46
 
   ctx.strokeStyle = color
   ctx.fillStyle = hurt > 0.2 ? '#fff4f4' : color
@@ -583,9 +618,15 @@ function drawFighter(ctx: CanvasRenderingContext2D, fighter: Fighter, color: str
   ctx.beginPath()
   ctx.moveTo(hipX, hipY)
   if (kick > 0) {
-    ctx.lineTo(hipX - dir * (10 - step * 0.2), fighter.y - air * 10)
+    ctx.lineTo(hipX - dir * 12, fighter.y - (crouched ? 0 : air * 10))
     ctx.moveTo(hipX, hipY)
-    ctx.lineTo(hipX + dir * (16 + kick * 74), hipY + 8 - kick * 46)
+    ctx.lineTo(hipX + dir * (16 + kick * kickReach), hipY + (lowAttack ? 14 : 8) - kick * kickLift)
+  } else if (crouched) {
+    ctx.lineTo(hipX - 24, hipY + 12)
+    ctx.lineTo(hipX - 20, fighter.y)
+    ctx.moveTo(hipX, hipY)
+    ctx.lineTo(hipX + 24, hipY + 12)
+    ctx.lineTo(hipX + 20, fighter.y)
   } else if (!grounded) {
     ctx.lineTo(hipX - 12, fighter.y - 18)
     ctx.moveTo(hipX, hipY)
@@ -598,9 +639,12 @@ function drawFighter(ctx: CanvasRenderingContext2D, fighter: Fighter, color: str
   ctx.moveTo(hipX, hipY)
   ctx.lineTo(shoulderX, shoulderY)
   ctx.moveTo(shoulderX, shoulderY)
-  ctx.lineTo(shoulderX - dir * (18 + step * 0.35), shoulderY + 30 - air * 10)
+  ctx.lineTo(shoulderX - dir * (18 + step * 0.35), shoulderY + (crouched ? 16 : 30) - air * 10)
   ctx.moveTo(shoulderX, shoulderY)
-  ctx.lineTo(shoulderX + dir * (16 + punch * 62), shoulderY + 32 - punch * 40 - air * 8)
+  ctx.lineTo(
+    shoulderX + dir * (16 + punch * punchReach),
+    shoulderY + (lowAttack ? 16 : 32) - punch * punchLift - air * 8,
+  )
   ctx.stroke()
   ctx.beginPath()
   ctx.arc(headX, headY, 15, 0, Math.PI * 2)

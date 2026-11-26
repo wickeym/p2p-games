@@ -31,6 +31,12 @@ export interface Fighter {
   stunMs: number
   /** This swing has already connected. */
   hit: boolean
+  /** Held crouch. The body and hitbox stay low while this is true. */
+  crouch: boolean
+  /** Crouch state latched when the current swing started. */
+  attackCrouch: boolean
+  /** 0 on the ground, 1 after the ground jump, 2 after the air jump. */
+  jumps: number
 }
 
 export interface Input {
@@ -39,6 +45,7 @@ export interface Input {
   jump: boolean
   punch: boolean
   kick: boolean
+  crouch: boolean
 }
 
 export interface World {
@@ -51,7 +58,7 @@ export interface World {
 }
 
 export function blankInput(): Input {
-  return { left: false, right: false, jump: false, punch: false, kick: false }
+  return { left: false, right: false, jump: false, punch: false, kick: false, crouch: false }
 }
 
 function fighter(x: number, facing: 1 | -1): Fighter {
@@ -66,6 +73,9 @@ function fighter(x: number, facing: 1 | -1): Fighter {
     attackMs: 0,
     stunMs: 0,
     hit: false,
+    crouch: false,
+    attackCrouch: false,
+    jumps: 0,
   }
 }
 
@@ -87,6 +97,7 @@ function startAttack(fighterState: Fighter, kind: 1 | 2): void {
   fighterState.attack = kind
   fighterState.attackMs = kind === 1 ? PUNCH_MS : KICK_MS
   fighterState.hit = false
+  fighterState.attackCrouch = fighterState.crouch
 }
 
 function separate(a: Fighter, b: Fighter): void {
@@ -107,14 +118,16 @@ function clampX(fighterState: Fighter): void {
 
 function tryHit(attacker: Fighter, defender: Fighter): void {
   if (attacker.hit || attacker.attack === 0) return
-  const reach = attacker.attack === 1 ? PUNCH_REACH : KICK_REACH
-  const radius = attacker.attack === 1 ? PUNCH_R : KICK_R
+  const low = attacker.attackCrouch
+  const reach = attacker.attack === 1 ? (low ? 36 : PUNCH_REACH) : low ? 48 : KICK_REACH
+  const radius = attacker.attack === 1 ? (low ? 18 : PUNCH_R) : low ? 20 : KICK_R
   const hx = attacker.x + attacker.facing * reach
-  const hy = attacker.y - (attacker.attack === 1 ? 78 : 36)
-  const by = defender.y - 70
+  const hy = attacker.y - (attacker.attack === 1 ? (low ? 34 : 78) : low ? 18 : 36)
+  const by = defender.y - (defender.crouch ? 34 : 70)
+  const body = defender.crouch ? 22 : BODY_R
   const dx = hx - defender.x
   const dy = hy - by
-  if (dx * dx + dy * dy > (radius + BODY_R) * (radius + BODY_R)) return
+  if (dx * dx + dy * dy > (radius + body) * (radius + body)) return
   const damage = attacker.attack === 1 ? PUNCH_DMG : KICK_DMG
   defender.health = Math.max(0, defender.health - damage)
   defender.stunMs = STUN_MS
@@ -155,10 +168,13 @@ export function stepWorld(world: World, inputs: [Input, Input], prev: [Input, In
     if (fighterState.attackMs === 0) fighterState.attack = 0
 
     const stunned = fighterState.stunMs > 0
+    const grounded = fighterState.y >= GROUND - 0.5 && fighterState.vy >= 0
+    fighterState.crouch = !stunned && grounded && input.crouch
     if (!stunned) {
       const left = input.left && !input.right
       const right = input.right && !input.left
-      fighterState.vx = left ? -MOVE_SPEED : right ? MOVE_SPEED : 0
+      const speed = fighterState.crouch ? MOVE_SPEED * 0.45 : MOVE_SPEED
+      fighterState.vx = left ? -speed : right ? speed : 0
       if (left) fighterState.facing = -1
       if (right) fighterState.facing = 1
       if (fighterState.attackMs === 0) {
@@ -167,11 +183,18 @@ export function stepWorld(world: World, inputs: [Input, Input], prev: [Input, In
       }
     }
 
-    const grounded = fighterState.y >= GROUND - 0.5 && fighterState.vy >= 0
     if (grounded) {
       fighterState.y = GROUND
       fighterState.vy = 0
-      if (!stunned && edge(input.jump, before.jump)) fighterState.vy = JUMP_V
+      fighterState.jumps = 0
+      if (!stunned && edge(input.jump, before.jump)) {
+        fighterState.vy = JUMP_V
+        fighterState.jumps = 1
+        fighterState.crouch = false
+      }
+    } else if (!stunned && edge(input.jump, before.jump) && fighterState.jumps < 2) {
+      fighterState.vy = JUMP_V * 0.92
+      fighterState.jumps = 2
     } else {
       fighterState.vy += GRAVITY * dt
     }
@@ -180,6 +203,8 @@ export function stepWorld(world: World, inputs: [Input, Input], prev: [Input, In
     if (fighterState.y >= GROUND) {
       fighterState.y = GROUND
       fighterState.vy = 0
+      fighterState.jumps = 0
+      fighterState.crouch = !stunned && input.crouch
     }
   }
 
@@ -214,6 +239,9 @@ function parseFighter(value: unknown, fallback: Fighter): Fighter {
     attackMs: Math.max(0, num(raw.attackMs, 0)),
     stunMs: Math.max(0, num(raw.stunMs, 0)),
     hit: raw.hit === true,
+    crouch: raw.crouch === true,
+    attackCrouch: raw.attackCrouch === true,
+    jumps: raw.jumps === 1 || raw.jumps === 2 ? raw.jumps : 0,
   }
 }
 
@@ -225,7 +253,15 @@ export function parseInput(value: unknown): Input | null {
   if (typeof raw.jump !== 'boolean') return null
   if (typeof raw.punch !== 'boolean') return null
   if (typeof raw.kick !== 'boolean') return null
-  return { left: raw.left, right: raw.right, jump: raw.jump, punch: raw.punch, kick: raw.kick }
+  if (typeof raw.crouch !== 'boolean') return null
+  return {
+    left: raw.left,
+    right: raw.right,
+    jump: raw.jump,
+    punch: raw.punch,
+    kick: raw.kick,
+    crouch: raw.crouch,
+  }
 }
 
 export function parseWorld(value: unknown): World | null {
