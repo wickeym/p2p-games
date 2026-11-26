@@ -1,3 +1,4 @@
+import { renderChess } from './chess-ui.ts'
 import { renderFight } from './fight.ts'
 import { applyMove, COLS, newGame, ROWS, type GameState, type Player } from './game.ts'
 import { connectRoom, type Role, type RoomConnection } from './net.ts'
@@ -38,7 +39,9 @@ function boot(): void {
     return
   }
   const role: Role = isStoredHost(game, roomId) ? 'host' : 'guest'
-  if (game === 'fight') renderFight(app, roomId, role, () => sessionStorage.removeItem(HOST_KEY))
+  const clearHost = () => sessionStorage.removeItem(HOST_KEY)
+  if (game === 'fight') renderFight(app, roomId, role, clearHost)
+  else if (game === 'chess') renderChess(app, roomId, role, clearHost)
   else renderMatch(roomId, role)
 }
 
@@ -59,6 +62,7 @@ function renderLobby(selected: GameId, message = ''): void {
     <div class="picker" role="group" aria-label="Game">
       <button type="button" id="pick-four" aria-pressed="false">Connect Four</button>
       <button type="button" id="pick-fight" aria-pressed="false">Stick Fight</button>
+      <button type="button" id="pick-chess" aria-pressed="false">Chess</button>
     </div>
     <p class="lede" id="blurb"></p>
     <button type="button" class="primary" id="start">Start a game</button>
@@ -75,17 +79,20 @@ function renderLobby(selected: GameId, message = ''): void {
   const blurb = wrap.querySelector<HTMLElement>('#blurb')
   const four = wrap.querySelector<HTMLButtonElement>('#pick-four')
   const fight = wrap.querySelector<HTMLButtonElement>('#pick-fight')
+  const chess = wrap.querySelector<HTMLButtonElement>('#pick-chess')
   if (error && message) error.textContent = message
 
+  const blurbs: Record<GameId, string> = {
+    four: 'Drop discs, connect four. One of you starts a room and shares the code.',
+    fight: 'Side-view stick fight. Move, jump, punch, and kick. The host decides hits.',
+    chess: 'Standard chess. Start the room to play white, or join to play black.',
+  }
   const showGame = () => {
     app.dataset.game = game
     if (four) four.setAttribute('aria-pressed', game === 'four' ? 'true' : 'false')
     if (fight) fight.setAttribute('aria-pressed', game === 'fight' ? 'true' : 'false')
-    if (blurb) {
-      blurb.textContent = game === 'fight'
-        ? 'Side-view stick fight. Move, jump, punch, and kick. The host decides hits.'
-        : 'Drop discs, connect four. One of you starts a room and shares the code.'
-    }
+    if (chess) chess.setAttribute('aria-pressed', game === 'chess' ? 'true' : 'false')
+    if (blurb) blurb.textContent = blurbs[game]
   }
   four?.addEventListener('click', () => {
     game = 'four'
@@ -93,6 +100,10 @@ function renderLobby(selected: GameId, message = ''): void {
   })
   fight?.addEventListener('click', () => {
     game = 'fight'
+    showGame()
+  })
+  chess?.addEventListener('click', () => {
+    game = 'chess'
     showGame()
   })
   showGame()

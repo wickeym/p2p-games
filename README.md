@@ -24,7 +24,7 @@ The published site is https://wickeym.github.io/p2p-games/.
 
 1. Choose **Start a game**. The page generates a short room code (for example `AB12`) and puts it in the URL as `?id=AB12`.
 2. That tab is the host. It registers a PeerJS id prefixed with `p2pgames-` (so `p2pgames-AB12`) so the room does not collide with an arbitrary id on the public broker.
-3. The share screen shows the full join URL and a QR code of that same URL. On the published site that is `https://wickeym.github.io/p2p-games/?id=AB12&game=four` or `game=fight`. When the host opened the page on localhost, the URL and QR use this Mac’s LAN IP, the dev-server port, and the `/p2p-games/` path instead.
+3. The share screen shows the full join URL and a QR code of that same URL. On the published site that is `https://wickeym.github.io/p2p-games/?id=AB12&game=four` (or `game=fight` or `game=chess`). When the host opened the page on localhost, the URL and QR use this Mac’s LAN IP, the dev-server port, and the `/p2p-games/` path instead.
 4. The other player scans the QR code, opens the link, or types the code on the landing page and chooses **Join**. Opening a URL that already has `?id=` joins that room.
 5. The joiner connects to the host. Red is the host and moves first. Yellow is the joiner.
 
@@ -40,7 +40,11 @@ If macOS Firewall is on, allow incoming connections to Node when a phone cannot 
 
 Side-view, two stick figures. Each player can move, jump, punch, and kick with the on-screen buttons or the keyboard (arrows or WASD, J punch, K kick). Positions and button presses sync over the WebRTC data channel. The host decides when a hit lands and who won the round, then sends that result to the other player. A round ends at 0 health or after 45 seconds. Rematch stays in the same room.
 
-The host's PeerJS id is prefixed with `p2pgames-fight-` so it does not collide with a Connect Four room that happens to use the same code (`p2pgames-four-`).
+The host's PeerJS id is prefixed with `p2pgames-fight-` so it does not collide with a Connect Four room (`p2pgames-four-`) or a chess room (`p2pgames-chess-`) that happens to use the same code.
+
+## Chess
+
+Standard chess. The host plays white and the joiner plays black. Tap a piece, then tap a highlighted square. The game allows castling, en passant, and promotion (the mover picks the piece). It announces check, checkmate, and stalemate, shows the last move, and rejects illegal moves. Rematch stays in the same room.
 
 ## Connect Four
 

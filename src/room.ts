@@ -7,17 +7,18 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
  */
 export const PEER_PREFIX = 'p2pgames-'
 
-export type GameId = 'four' | 'fight'
+export type GameId = 'four' | 'fight' | 'chess'
 
 export function parseGame(raw: string | null): GameId {
-  return raw === 'fight' ? 'fight' : 'four'
+  if (raw === 'fight' || raw === 'chess') return raw
+  return 'four'
 }
 
-/** Pull `game=fight` or `game=four` out of a pasted join link. */
+/** Pull `game=four|fight|chess` out of a pasted join link. */
 export function gameInText(raw: string): GameId | null {
-  const match = raw.match(/[?&]game=(four|fight)\b/)
-  if (!match) return null
-  return match[1] === 'fight' ? 'fight' : 'four'
+  const match = raw.match(/[?&]game=(four|fight|chess)\b/)
+  if (match?.[1] === 'fight' || match?.[1] === 'chess' || match?.[1] === 'four') return match[1]
+  return null
 }
 
 /** Prefixed so a room cannot collide with an arbitrary public PeerJS id, or the other game. */
