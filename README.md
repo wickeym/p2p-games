@@ -38,7 +38,7 @@ If macOS Firewall is on, allow incoming connections to Node when a phone cannot 
 
 ## Stick Fight
 
-Side-view, two stick figures. Each player can move, jump, punch, and kick with the on-screen buttons or the keyboard (arrows or WASD, J punch, K kick). Positions and button presses sync over the WebRTC data channel. The host decides when a hit lands and who won the round, then sends that result to the other player. A round ends at 0 health or after 45 seconds. Rematch stays in the same room.
+Side-view, two stick figures. On a phone, hold the joystick to walk and use the jump, punch, and kick buttons; you can move and attack at the same time. Keyboard stays on arrows or WASD, J to punch, and K to kick. The figures walk, jump, swing, and react to hits, and that motion is synced to the other player. The host decides when a hit lands and who won the round. A round ends at 0 health or after 45 seconds. Rematch stays in the same room.
 
 The host's PeerJS id is prefixed with `p2pgames-fight-` so it does not collide with a Connect Four room (`p2pgames-four-`) or a chess room (`p2pgames-chess-`) that happens to use the same code.
 

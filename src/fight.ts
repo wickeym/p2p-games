@@ -4,11 +4,15 @@ import {
   blankInput,
   createWorld,
   GROUND,
+  KICK_MS,
   parseInput,
   parseWorld,
+  PUNCH_MS,
   stepWorld,
+  STUN_MS,
   type Fighter,
   type Input,
+  type World,
 } from './fight-sim.ts'
 import { openRoom, type PeerLink, type Role } from './peer.ts'
 import { qrDataUrl } from './qr.ts'
@@ -16,7 +20,7 @@ import { peerIdForRoom } from './room.ts'
 import { lanHostMissing, shareUrl } from './share.ts'
 
 const STEP = 1000 / 60
-const SEND_MS = 50
+const SEND_MS = 16
 
 export function renderFight(app: HTMLElement, roomId: string, role: Role, clearHost: () => void): void {
   document.title = `Stick Fight ${roomId}`
@@ -37,6 +41,14 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   let lastFrame = 0
   let acc = 0
   let raf = 0
+  let stickLeft = false
+  let stickRight = false
+  let keyLeft = false
+  let keyRight = false
+  let stickPointer: number | null = null
+  const shown = createWorld()
+  const viewport = document.querySelector('meta[name="viewport"]')
+  const savedViewport = viewport instanceof HTMLMetaElement ? viewport.content : ''
 
   app.replaceChildren()
   app.dataset.room = roomId
@@ -74,15 +86,18 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
         <strong class="clock" id="clock">45</strong>
         <div class="bar guest"><span id="hp1"></span></div>
       </div>
-      <canvas id="arena" class="arena" width="960" height="540"></canvas>
-      <div class="pad">
-        <button type="button" data-hold="left" aria-label="Move left">Left</button>
-        <button type="button" data-hold="right" aria-label="Move right">Right</button>
-        <button type="button" data-hold="jump" aria-label="Jump">Jump</button>
-        <button type="button" data-hold="punch" aria-label="Punch">Punch</button>
-        <button type="button" data-hold="kick" aria-label="Kick">Kick</button>
+      <div class="arena-slot"><canvas id="arena" class="arena" width="960" height="540"></canvas></div>
+      <div class="controls">
+        <div class="stick" id="stick" aria-label="Move left or right">
+          <div class="stick-knob" id="knob"></div>
+        </div>
+        <div class="actions">
+          <button type="button" data-hold="jump" aria-label="Jump">Jump</button>
+          <button type="button" data-hold="punch" aria-label="Punch">Punch</button>
+          <button type="button" data-hold="kick" aria-label="Kick">Kick</button>
+        </div>
       </div>
-      <p class="hint">Arrows or WASD to move and jump. J punches. K kicks.</p>
+      <p class="hint keys">Arrows or WASD, J punch, K kick.</p>
       <button type="button" class="primary" id="rematch" hidden>Rematch</button>
     </section>
     <p class="foot">Signaling uses the public PeerJS broker. The host decides hits and the round.</p>
@@ -98,6 +113,8 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   const qr = must(wrap.querySelector<HTMLImageElement>('#qr'))
   const hint = must(wrap.querySelector<HTMLElement>('#hint'))
   const stage = must(wrap.querySelector<HTMLElement>('#stage'))
+  const stick = must(wrap.querySelector<HTMLElement>('#stick'))
+  const knob = must(wrap.querySelector<HTMLElement>('#knob'))
   const canvas = must(wrap.querySelector<HTMLCanvasElement>('#arena'))
   const ctx = canvas.getContext('2d') ?? failCanvas()
   const hp0 = must(wrap.querySelector<HTMLElement>('#hp0'))
@@ -148,22 +165,73 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   })
 
   const mine = () => (role === 'host' ? hostInput : guestInput)
+  const applyAxes = () => {
+    const input = mine()
+    input.left = stickLeft || keyLeft
+    input.right = stickRight || keyRight
+  }
+  const placeKnob = (clientX: number, clientY: number) => {
+    const rect = stick.getBoundingClientRect()
+    const cx = rect.left + rect.width / 2
+    const cy = rect.top + rect.height / 2
+    const max = Math.max(24, rect.width / 2 - 28)
+    let dx = clientX - cx
+    let dy = clientY - cy
+    const mag = Math.hypot(dx, dy)
+    if (mag > max) {
+      dx = (dx / mag) * max
+      dy = (dy / mag) * max
+    }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`
+    const axis = dx / max
+    stickLeft = axis < -0.28
+    stickRight = axis > 0.28
+    stick.dataset.held = stickPointer === null ? 'false' : 'true'
+    stick.dataset.dir = stickLeft ? 'left' : stickRight ? 'right' : 'center'
+    applyAxes()
+  }
+  stick.addEventListener('pointerdown', (event) => {
+    event.preventDefault()
+    try {
+      stick.setPointerCapture(event.pointerId)
+    } catch {
+      // Synthetic events and some browsers refuse capture; the pointer id still tracks the drag.
+    }
+    stickPointer = event.pointerId
+    placeKnob(event.clientX, event.clientY)
+  })
+  stick.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== stickPointer) return
+    event.preventDefault()
+    placeKnob(event.clientX, event.clientY)
+  })
+  const releaseStick = (event: PointerEvent) => {
+    if (event.pointerId !== stickPointer) return
+    stickPointer = null
+    placeKnob(stick.getBoundingClientRect().left + stick.getBoundingClientRect().width / 2, stick.getBoundingClientRect().top + stick.getBoundingClientRect().height / 2)
+  }
+  stick.addEventListener('pointerup', releaseStick)
+  stick.addEventListener('pointercancel', releaseStick)
+
   for (const button of wrap.querySelectorAll<HTMLButtonElement>('[data-hold]')) {
     const key = button.dataset.hold
-    if (key !== 'left' && key !== 'right' && key !== 'jump' && key !== 'punch' && key !== 'kick') continue
+    if (key !== 'jump' && key !== 'punch' && key !== 'kick') continue
     const set = (down: boolean) => {
       mine()[key] = down
       button.dataset.on = down ? 'true' : 'false'
     }
     button.addEventListener('pointerdown', (event) => {
       event.preventDefault()
-      button.setPointerCapture(event.pointerId)
+      try {
+        button.setPointerCapture(event.pointerId)
+      } catch {
+        // Synthetic events have no active pointer. The button still latches.
+      }
       set(true)
     })
     const up = () => set(false)
     button.addEventListener('pointerup', up)
     button.addEventListener('pointercancel', up)
-    button.addEventListener('lostpointercapture', up)
   }
 
   const keys: Record<string, keyof Input> = {
@@ -184,7 +252,10 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     if (!key) return
     event.preventDefault()
     if (down && event.repeat) return
-    mine()[key] = down
+    if (key === 'left') keyLeft = down
+    else if (key === 'right') keyRight = down
+    else mine()[key] = down
+    applyAxes()
     const button = wrap.querySelector<HTMLButtonElement>(`[data-hold="${key}"]`)
     if (button) button.dataset.on = down ? 'true' : 'false'
   }
@@ -192,6 +263,40 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   const keyUp = (event: KeyboardEvent) => onKey(event, false)
   window.addEventListener('keydown', keyDown)
   window.addEventListener('keyup', keyUp)
+
+  function setLock(on: boolean): void {
+    document.documentElement.classList.toggle('fight-lock', on)
+    if (viewport instanceof HTMLMetaElement) {
+      viewport.content = on
+        ? 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+        : savedViewport
+    }
+  }
+
+  function follow(next: World): World {
+    shown.timeLeft = next.timeLeft
+    shown.winner = next.winner
+    shown.draw = next.draw
+    shown.over = next.over
+    for (let i = 0; i < 2; i++) {
+      const view = shown.fighters[i]
+      const auth = next.fighters[i]
+      if (!view || !auth) continue
+      if (Math.abs(auth.x - view.x) > 90) view.x = auth.x
+      else view.x += (auth.x - view.x) * 0.55
+      if (Math.abs(auth.y - view.y) > 90) view.y = auth.y
+      else view.y += (auth.y - view.y) * 0.55
+      view.vx = auth.vx
+      view.vy = auth.vy
+      view.facing = auth.facing
+      view.health = auth.health
+      view.attack = auth.attack
+      view.attackMs = auth.attackMs
+      view.stunMs = auth.stunMs
+      view.hit = auth.hit
+    }
+    return shown
+  }
 
   function describe(): string {
     if (world.over) {
@@ -212,31 +317,49 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     share.hidden = !showShare
     stage.hidden = !connected
     rematch.hidden = !(connected && world.over)
-    hp0.style.width = `${world.fighters[0].health}%`
-    hp1.style.width = `${world.fighters[1].health}%`
-    clock.textContent = String(Math.ceil(world.timeLeft / 1000))
+    const view = role === 'guest' ? follow(world) : world
+    hp0.style.width = `${view.fighters[0].health}%`
+    hp1.style.width = `${view.fighters[1].health}%`
+    clock.textContent = String(Math.ceil(view.timeLeft / 1000))
     app.dataset.connected = connected ? 'true' : 'false'
     app.dataset.screen = showShare ? 'share' : connected ? 'game' : 'joining'
-    app.dataset.x0 = String(Math.round(world.fighters[0].x))
-    app.dataset.x1 = String(Math.round(world.fighters[1].x))
-    app.dataset.y0 = String(Math.round(world.fighters[0].y))
-    app.dataset.over = world.over ? 'true' : 'false'
-    draw()
+    app.dataset.x0 = String(Math.round(view.fighters[0].x))
+    app.dataset.x1 = String(Math.round(view.fighters[1].x))
+    app.dataset.y0 = String(Math.round(view.fighters[0].y))
+    app.dataset.over = view.over ? 'true' : 'false'
+    const held = mine()
+    app.dataset.move = held.left ? 'left' : held.right ? 'right' : 'none'
+    app.dataset.pose0 = poseOf(view.fighters[0])
+    app.dataset.pose1 = poseOf(view.fighters[1])
+    app.dataset.swing0 = String(swingOf(view.fighters[0]))
+    app.dataset.leg0 = String(legOf(view.fighters[0]))
+    setLock(connected)
+    draw(view)
   }
 
-  function draw(): void {
-    const width = canvas.clientWidth
-    if (width <= 0) return
-    const height = width * (ARENA_H / ARENA_W)
-    canvas.style.height = `${height}px`
+  function draw(view: World): void {
+    const slot = canvas.parentElement
+    if (!slot) return
+    const availW = slot.clientWidth
+    const availH = slot.clientHeight
+    if (availW <= 0 || availH <= 0) return
+    const aspect = ARENA_W / ARENA_H
+    let cssW = availW
+    let cssH = cssW / aspect
+    if (cssH > availH) {
+      cssH = availH
+      cssW = cssH * aspect
+    }
+    canvas.style.width = `${cssW}px`
+    canvas.style.height = `${cssH}px`
     const dpr = Math.min(2, window.devicePixelRatio || 1)
-    const pixelW = Math.round(width * dpr)
-    const pixelH = Math.round(height * dpr)
+    const pixelW = Math.max(1, Math.round(cssW * dpr))
+    const pixelH = Math.max(1, Math.round(cssH * dpr))
     if (canvas.width !== pixelW || canvas.height !== pixelH) {
       canvas.width = pixelW
       canvas.height = pixelH
     }
-    ctx.setTransform((pixelW / ARENA_W), 0, 0, (pixelH / ARENA_H), 0, 0)
+    ctx.setTransform(pixelW / ARENA_W, 0, 0, pixelH / ARENA_H, 0, 0)
     const sky = ctx.createLinearGradient(0, 0, 0, ARENA_H)
     sky.addColorStop(0, '#24517a')
     sky.addColorStop(1, '#102033')
@@ -250,8 +373,8 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     ctx.moveTo(0, GROUND)
     ctx.lineTo(ARENA_W, GROUND)
     ctx.stroke()
-    drawFighter(ctx, world.fighters[1], '#f5c400')
-    drawFighter(ctx, world.fighters[0], '#e10600')
+    drawFighter(ctx, view.fighters[1], '#f5c400')
+    drawFighter(ctx, view.fighters[0], '#e10600')
   }
 
   function sendWorld(): void {
@@ -369,16 +492,52 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     raf = window.requestAnimationFrame(frame)
   }
 
+  const blockScroll = (event: TouchEvent) => {
+    if (!document.documentElement.classList.contains('fight-lock')) return
+    event.preventDefault()
+  }
+  const blockGesture = (event: Event) => {
+    if (document.documentElement.classList.contains('fight-lock')) event.preventDefault()
+  }
+  document.addEventListener('touchmove', blockScroll, { passive: false })
+  document.addEventListener('gesturestart', blockGesture)
+
   function stop(): void {
     window.cancelAnimationFrame(raf)
     window.removeEventListener('keydown', keyDown)
     window.removeEventListener('keyup', keyUp)
+    document.removeEventListener('touchmove', blockScroll)
+    document.removeEventListener('gesturestart', blockGesture)
+    setLock(false)
     link.destroy()
   }
 
   window.addEventListener('pagehide', () => stop(), { once: true })
   paint()
   raf = window.requestAnimationFrame(frame)
+}
+
+function poseOf(fighter: Fighter): string {
+  if (fighter.stunMs > 0) return 'hurt'
+  if (fighter.attack === 1) return 'punch'
+  if (fighter.attack === 2) return 'kick'
+  if (fighter.y < GROUND - 2) return 'jump'
+  if (Math.abs(fighter.vx) > 20) return 'walk'
+  return 'idle'
+}
+
+function swingOf(fighter: Fighter): number {
+  if (fighter.attack === 0) return 0
+  const total = fighter.attack === 1 ? PUNCH_MS : KICK_MS
+  const progress = 1 - fighter.attackMs / total
+  const clamped = Math.min(1, Math.max(0, progress))
+  return Math.round(Math.sin(clamped * Math.PI) * 100)
+}
+
+function legOf(fighter: Fighter): number {
+  const walking = Math.abs(fighter.vx) > 20 && fighter.y >= GROUND - 2 && fighter.attack !== 2 && fighter.stunMs === 0
+  if (!walking) return 0
+  return Math.round(Math.sin(fighter.x / 18) * 10)
 }
 
 function inputDiffers(a: Input, b: Input): boolean {
@@ -394,30 +553,61 @@ function must<T extends Element>(element: T | null): T {
   return element
 }
 
+function limb(progress: number): number {
+  const clamped = Math.min(1, Math.max(0, progress))
+  return Math.sin(clamped * Math.PI)
+}
+
 function drawFighter(ctx: CanvasRenderingContext2D, fighter: Fighter, color: string): void {
-  const hip = fighter.y - 48
-  const shoulder = fighter.y - 96
-  const head = fighter.y - 122
   const dir = fighter.facing
+  const grounded = fighter.y >= GROUND - 2
+  const hurt = fighter.stunMs > 0 ? fighter.stunMs / STUN_MS : 0
+  const lean = -dir * hurt * 28
+  const walking = grounded && Math.abs(fighter.vx) > 20 && fighter.attack !== 2 && hurt === 0
+  const step = walking ? Math.sin(fighter.x / 18) * 20 : 0
+  const air = grounded ? 0 : Math.max(-1, Math.min(1, -fighter.vy / 700))
+  const punch = fighter.attack === 1 ? limb(1 - fighter.attackMs / PUNCH_MS) : 0
+  const kick = fighter.attack === 2 ? limb(1 - fighter.attackMs / KICK_MS) : 0
+  const hipX = fighter.x + lean * 0.35
+  const hipY = fighter.y - (grounded ? 50 : 40 + air * 6)
+  const shoulderX = fighter.x + lean
+  const shoulderY = fighter.y - (grounded ? 100 : 92)
+  const headX = fighter.x + lean * 1.25
+  const headY = fighter.y - (grounded ? 126 : 118)
+
   ctx.strokeStyle = color
-  ctx.fillStyle = color
+  ctx.fillStyle = hurt > 0.2 ? '#fff4f4' : color
   ctx.lineWidth = 7
   ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
   ctx.beginPath()
-  ctx.moveTo(fighter.x, hip)
-  ctx.lineTo(fighter.x - 18, fighter.y)
-  ctx.moveTo(fighter.x, hip)
-  if (fighter.attack === 2) ctx.lineTo(fighter.x + dir * 64, hip + 6)
-  else ctx.lineTo(fighter.x + 18, fighter.y)
-  ctx.moveTo(fighter.x, hip)
-  ctx.lineTo(fighter.x, shoulder)
-  ctx.moveTo(fighter.x, shoulder)
-  ctx.lineTo(fighter.x - dir * 20, shoulder + 30)
-  ctx.moveTo(fighter.x, shoulder)
-  if (fighter.attack === 1) ctx.lineTo(fighter.x + dir * 58, shoulder + 4)
-  else ctx.lineTo(fighter.x + dir * 18, shoulder + 32)
+  ctx.moveTo(hipX, hipY)
+  if (kick > 0) {
+    ctx.lineTo(hipX - dir * (10 - step * 0.2), fighter.y - air * 10)
+    ctx.moveTo(hipX, hipY)
+    ctx.lineTo(hipX + dir * (16 + kick * 74), hipY + 8 - kick * 46)
+  } else if (!grounded) {
+    ctx.lineTo(hipX - 12, fighter.y - 18)
+    ctx.moveTo(hipX, hipY)
+    ctx.lineTo(hipX + dir * 18, fighter.y - 14 - air * 8)
+  } else {
+    ctx.lineTo(hipX - 16 + step, fighter.y)
+    ctx.moveTo(hipX, hipY)
+    ctx.lineTo(hipX + 16 - step, fighter.y)
+  }
+  ctx.moveTo(hipX, hipY)
+  ctx.lineTo(shoulderX, shoulderY)
+  ctx.moveTo(shoulderX, shoulderY)
+  ctx.lineTo(shoulderX - dir * (18 + step * 0.35), shoulderY + 30 - air * 10)
+  ctx.moveTo(shoulderX, shoulderY)
+  ctx.lineTo(shoulderX + dir * (16 + punch * 62), shoulderY + 32 - punch * 40 - air * 8)
   ctx.stroke()
   ctx.beginPath()
-  ctx.arc(fighter.x, head, 15, 0, Math.PI * 2)
+  ctx.arc(headX, headY, 15, 0, Math.PI * 2)
   ctx.fill()
+  ctx.globalAlpha = 0.35
+  ctx.beginPath()
+  ctx.ellipse(fighter.x, GROUND + 6, 22 - air * 6, 6, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.globalAlpha = 1
 }

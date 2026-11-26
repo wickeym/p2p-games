@@ -274,6 +274,13 @@ h2 {
 .bar.host span { background: #e10600; }
 .bar.guest span { background: #f5c400; margin-left: auto; }
 
+.arena-slot {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .arena {
   width: 100%;
   height: auto;
@@ -282,26 +289,125 @@ h2 {
   touch-action: none;
 }
 
-.pad {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  touch-action: none;
+  user-select: none;
 }
 
-.pad button {
-  min-height: 64px;
+.stick {
+  width: 148px;
+  height: 148px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgba(23, 48, 74, 0.95);
+  border: 2px solid #3c5270;
+  position: relative;
+  touch-action: none;
+}
+
+.stick-knob {
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 50%;
+  background: #f4f7fb;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  touch-action: none;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  flex: 1 1 auto;
+}
+
+.actions button {
+  min-width: 84px;
+  min-height: 80px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 18px;
   background: #17304a;
   color: #f4f7fb;
+  font-size: 1.2rem;
   font-weight: 700;
   touch-action: none;
   user-select: none;
 }
 
-.pad button[data-on="true"] {
+.actions [data-hold="jump"] {
+  grid-column: 1 / -1;
+  min-height: 76px;
+}
+
+.actions button[data-on="true"] {
   background: #f4f7fb;
   color: #102033;
+}
+
+html.fight-lock,
+html.fight-lock body {
+  overflow: hidden;
+  height: 100%;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+html.fight-lock .fight-wrap {
+  width: min(100%, 960px);
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  gap: 6px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+html.fight-lock .fight-wrap .stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+html.fight-lock .arena-slot {
+  flex: 1;
+  min-height: 0;
+}
+
+html.fight-lock .foot,
+html.fight-lock .keys {
+  display: none;
+}
+
+@media (max-width: 360px) {
+  .stick { width: 116px; height: 116px; }
+  .stick-knob { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+  .actions button { min-width: 72px; min-height: 72px; font-size: 1rem; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  html.fight-lock .you,
+  html.fight-lock .room,
+  html.fight-lock .eyebrow {
+    display: none;
+  }
+
+  html.fight-lock h1 { font-size: 1.15rem; }
+
+  .stick { width: 112px; height: 112px; }
+  .stick-knob { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
+  .actions button { min-height: 68px; min-width: 76px; font-size: 1.05rem; }
+  .actions [data-hold="jump"] { min-height: 64px; }
 }
 
 .chess-wrap { width: min(100%, 560px); }

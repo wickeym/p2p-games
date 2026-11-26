@@ -12,11 +12,11 @@ const PUNCH_REACH = 52
 const PUNCH_R = 26
 const KICK_REACH = 70
 const KICK_R = 30
-const PUNCH_MS = 200
-const KICK_MS = 280
+export const PUNCH_MS = 220
+export const KICK_MS = 300
+export const STUN_MS = 320
 const PUNCH_DMG = 10
 const KICK_DMG = 16
-const STUN_MS = 280
 
 export interface Fighter {
   x: number
@@ -162,8 +162,8 @@ export function stepWorld(world: World, inputs: [Input, Input], prev: [Input, In
       if (left) fighterState.facing = -1
       if (right) fighterState.facing = 1
       if (fighterState.attackMs === 0) {
-        if (edge(input.kick, before.kick)) startAttack(fighterState, 2)
-        else if (edge(input.punch, before.punch)) startAttack(fighterState, 1)
+        if (input.kick) startAttack(fighterState, 2)
+        else if (input.punch) startAttack(fighterState, 1)
       }
     }
 
