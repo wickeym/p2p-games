@@ -43,8 +43,10 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   let raf = 0
   let stickLeft = false
   let stickRight = false
+  let stickCrouch = false
   let keyLeft = false
   let keyRight = false
+  let keyCrouch = false
   let stickPointer: number | null = null
   const shown = createWorld()
   const viewport = document.querySelector('meta[name="viewport"]')
@@ -89,21 +91,24 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
         <strong class="clock" id="clock">45</strong>
         <div class="bar guest"><span id="hp1"></span></div>
       </div>
-      <div class="arena-slot">
-        <canvas id="arena" class="arena" width="960" height="540"></canvas>
-        <div class="controls">
-          <div class="stick" id="stick" aria-label="Move left or right">
-            <div class="stick-knob" id="knob"></div>
-          </div>
-          <div class="actions">
-            <button type="button" data-hold="jump" aria-label="Jump">Jump</button>
-            <button type="button" data-hold="crouch" aria-label="Crouch">Crouch</button>
-            <button type="button" data-hold="punch" aria-label="Punch">Punch</button>
-            <button type="button" data-hold="kick" aria-label="Kick">Kick</button>
-          </div>
+      <div class="playfield">
+        <div class="stick" id="stick" aria-label="Move. Down crouches.">
+          <div class="stick-knob" id="knob"></div>
+        </div>
+        <div class="arena-slot"><canvas id="arena" class="arena" width="960" height="540"></canvas></div>
+        <div class="actions">
+          <button type="button" data-hold="jump" aria-label="Jump">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 12h4v9h6v-9h4z"/></svg>
+          </button>
+          <button type="button" data-hold="punch" aria-label="Punch">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11V7a2 2 0 1 1 4 0v4h1V8a2 2 0 1 1 4 0v6.2A6 6 0 0 1 9.2 20H8a4 4 0 0 1-4-4v-3a2 2 0 0 1 4 0z"/></svg>
+          </button>
+          <button type="button" data-hold="kick" aria-label="Kick">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14c3 0 4-2 6-2 2 1 3 1 5 1 2 0 3-1 4-2l1 2c-2 3-5 5-9 5-3 0-5-1-7-4zM14 6l3 3-2 1-2-2z"/></svg>
+          </button>
         </div>
       </div>
-      <p class="hint keys">Arrows or WASD. Down or S crouches. J punch, K kick.</p>
+      <p class="hint keys">Arrows or WASD. Pull the stick down, or press Down or S, to crouch. J punch, K kick.</p>
       <button type="button" class="primary" id="rematch" hidden>Rematch</button>
     </section>
     <p class="foot">Signaling uses the public PeerJS broker. The host decides hits and the round.</p>
@@ -176,12 +181,14 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     const input = mine()
     input.left = stickLeft || keyLeft
     input.right = stickRight || keyRight
+    input.crouch = stickCrouch || keyCrouch
   }
   const placeKnob = (clientX: number, clientY: number) => {
     const rect = stick.getBoundingClientRect()
     const cx = rect.left + rect.width / 2
     const cy = rect.top + rect.height / 2
-    const max = Math.max(24, rect.width / 2 - 28)
+    const knobSize = knob.offsetWidth || 36
+    const max = Math.max(16, rect.width / 2 - knobSize / 2 - 6)
     let dx = clientX - cx
     let dy = clientY - cy
     const mag = Math.hypot(dx, dy)
@@ -190,11 +197,13 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
       dy = (dy / mag) * max
     }
     knob.style.transform = `translate(${dx}px, ${dy}px)`
-    const axis = dx / max
-    stickLeft = axis < -0.28
-    stickRight = axis > 0.28
+    const axisX = dx / max
+    const axisY = dy / max
+    stickLeft = axisX < -0.3
+    stickRight = axisX > 0.3
+    stickCrouch = axisY > 0.38
     stick.dataset.held = stickPointer === null ? 'false' : 'true'
-    stick.dataset.dir = stickLeft ? 'left' : stickRight ? 'right' : 'center'
+    stick.dataset.dir = stickCrouch ? 'down' : stickLeft ? 'left' : stickRight ? 'right' : 'center'
     applyAxes()
   }
   stick.addEventListener('pointerdown', (event) => {
@@ -222,7 +231,7 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
 
   for (const button of wrap.querySelectorAll<HTMLButtonElement>('[data-hold]')) {
     const key = button.dataset.hold
-    if (key !== 'jump' && key !== 'punch' && key !== 'kick' && key !== 'crouch') continue
+    if (key !== 'jump' && key !== 'punch' && key !== 'kick') continue
     const set = (down: boolean) => {
       mine()[key] = down
       button.dataset.on = down ? 'true' : 'false'
@@ -263,6 +272,7 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     if (down && event.repeat) return
     if (key === 'left') keyLeft = down
     else if (key === 'right') keyRight = down
+    else if (key === 'crouch') keyCrouch = down
     else mine()[key] = down
     applyAxes()
     const button = wrap.querySelector<HTMLButtonElement>(`[data-hold="${key}"]`)

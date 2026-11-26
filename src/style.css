@@ -276,7 +276,11 @@ h2 {
 
 .arena-slot {
   position: relative;
-  min-height: 180px;
+  align-self: stretch;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -301,38 +305,37 @@ h2 {
   touch-action: none;
 }
 
-.controls {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-  background: transparent;
-  touch-action: none;
-  user-select: none;
-  pointer-events: none;
+.playfield {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 64px;
+  align-items: end;
+  gap: 8px;
+}
+
+.bars {
+  position: relative;
+  z-index: 2;
+  background: #102033;
 }
 
 .stick {
-  width: 148px;
-  height: 148px;
-  flex: 0 0 auto;
+  width: 84px;
+  height: 84px;
+  justify-self: center;
   border-radius: 50%;
   background: rgba(23, 48, 74, 0.28);
   border: 2px solid rgba(244, 247, 251, 0.45);
   position: relative;
   touch-action: none;
-  pointer-events: auto;
 }
 
 .stick-knob {
-  width: 64px;
-  height: 64px;
-  margin: -32px 0 0 -32px;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
   border-radius: 50%;
   background: rgba(244, 247, 251, 0.5);
   position: absolute;
@@ -342,29 +345,32 @@ h2 {
 }
 
 .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
 }
 
 .actions button {
-  min-width: 84px;
-  min-height: 72px;
+  width: 52px;
+  height: 52px;
+  min-width: 52px;
+  min-height: 52px;
+  padding: 0;
   border: 2px solid rgba(244, 247, 251, 0.45);
-  border-radius: 18px;
+  border-radius: 50%;
   background: rgba(23, 48, 74, 0.28);
   color: #f4f7fb;
-  font-size: 1.15rem;
-  font-weight: 700;
+  display: grid;
+  place-items: center;
   touch-action: none;
-  user-select: none;
-  pointer-events: auto;
 }
 
-.actions [data-hold="jump"],
-.actions [data-hold="crouch"] {
-  min-height: 72px;
+.actions button svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
 }
 
 .actions button[data-on="true"] {
@@ -403,7 +409,6 @@ html.fight-lock .fight-wrap .stage {
 html.fight-lock .rotate { flex: 1; }
 
 html.fight-lock .arena-slot {
-  flex: 1;
   min-height: 0;
 }
 
@@ -412,26 +417,22 @@ html.fight-lock .keys {
   display: none;
 }
 
-@media (max-width: 360px) {
-  .stick { width: 116px; height: 116px; }
-  .stick-knob { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
-  .actions button { min-width: 72px; min-height: 72px; font-size: 1rem; }
-}
-
 @media (orientation: landscape) and (max-height: 520px) {
   html.fight-lock .you,
   html.fight-lock .room,
-  html.fight-lock .eyebrow {
+  html.fight-lock .eyebrow,
+  html.fight-lock .keys {
     display: none;
   }
 
   html.fight-lock h1 { font-size: 1.15rem; }
 
-  .stick { width: 112px; height: 112px; }
-  .stick-knob { width: 52px; height: 52px; margin: -26px 0 0 -26px; }
-  .actions button { min-height: 68px; min-width: 76px; font-size: 1.05rem; }
-  .actions [data-hold="jump"],
-  .actions [data-hold="crouch"] { min-height: 64px; }
+  .playfield { grid-template-columns: 80px minmax(0, 1fr) 56px; gap: 6px; }
+  .stick { width: 72px; height: 72px; }
+  .stick-knob { width: 30px; height: 30px; margin: -15px 0 0 -15px; }
+  .actions { gap: 6px; }
+  .actions button { width: 46px; height: 46px; min-width: 46px; min-height: 46px; }
+  .actions button svg { width: 22px; height: 22px; }
 }
 
 .chess-wrap { width: min(100%, 560px); }
