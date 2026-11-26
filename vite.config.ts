@@ -21,6 +21,8 @@ function lanIPv4(): string {
 }
 
 export default defineConfig({
+  // Project site: https://wickeym.github.io/p2p-games/
+  base: '/p2p-games/',
   define: {
     __LAN_HOST__: JSON.stringify(lanIPv4()),
   },

@@ -14,15 +14,17 @@ npm install
 npm run dev
 ```
 
-`npm run dev` starts Vite on the LAN (`vite --host`). Open the `Local` URL it prints, usually http://localhost:5173.
+`npm run dev` starts Vite on the LAN (`vite --host`). The app is served under `/p2p-games/`, usually http://localhost:5173/p2p-games/.
 
-The dev server also listens on this computer’s network address, for example http://192.168.x.x:5173. A phone on the same Wi-Fi uses that address, not `127.0.0.1`.
+The dev server also listens on this computer’s network address, for example http://192.168.x.x:5173/p2p-games/. A phone on the same Wi-Fi uses that address, not `127.0.0.1`.
+
+The published site is https://wickeym.github.io/p2p-games/.
 
 ## Share and join
 
 1. Choose **Start a game**. The page generates a short room code (for example `AB12`) and puts it in the URL as `?id=AB12`.
 2. That tab is the host. It registers a PeerJS id prefixed with `p2pgames-` (so `p2pgames-AB12`) so the room does not collide with an arbitrary id on the public broker.
-3. The share screen shows the full join URL and a QR code of that same URL. When the host opened the page on localhost, the URL and QR use this Mac’s LAN IP and the dev-server port.
+3. The share screen shows the full join URL and a QR code of that same URL. On the published site that is `https://wickeym.github.io/p2p-games/?id=AB12`. When the host opened the page on localhost, the URL and QR use this Mac’s LAN IP, the dev-server port, and the `/p2p-games/` path instead.
 4. The other player scans the QR code, opens the link, or types the code on the landing page and chooses **Join**. Opening a URL that already has `?id=` joins that room.
 5. The joiner connects to the host. Red is the host and moves first. Yellow is the joiner.
 

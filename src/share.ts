@@ -7,16 +7,24 @@ export function isLocalHostname(hostname: string): boolean {
   )
 }
 
+function normalizeBase(basePath: string): string {
+  if (!basePath || basePath === '/') return '/'
+  const withSlash = basePath.startsWith('/') ? basePath : `/${basePath}`
+  return withSlash.endsWith('/') ? withSlash : `${withSlash}/`
+}
+
 /**
- * Join link for the room. On localhost, swap in the machine's LAN address so
- * a phone on the same Wi-Fi can open it. The port stays the dev server's port.
+ * Join link for the room. The path is the Vite base (`/p2p-games/` on the
+ * GitHub Pages project site). On localhost, the host is this machine's LAN
+ * address so a phone on the same Wi-Fi can open it.
  */
 export function buildShareUrl(
   roomId: string,
-  loc: { protocol: string; hostname: string; host: string; pathname: string },
+  loc: { protocol: string; hostname: string; host: string },
   lanHost: string,
+  basePath: string,
 ): string {
-  const url = new URL(`${loc.protocol}//${loc.host}${loc.pathname}`)
+  const url = new URL(`${loc.protocol}//${loc.host}${normalizeBase(basePath)}`)
   if (isLocalHostname(loc.hostname) && lanHost) url.hostname = lanHost
   url.search = ''
   url.hash = ''
@@ -31,9 +39,9 @@ export function shareUrl(roomId: string): string {
       protocol: location.protocol,
       hostname: location.hostname,
       host: location.host,
-      pathname: location.pathname,
     },
     __LAN_HOST__,
+    import.meta.env.BASE_URL,
   )
 }
 
