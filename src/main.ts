@@ -1,7 +1,8 @@
+import { renderFight } from './fight.ts'
 import { applyMove, COLS, newGame, ROWS, type GameState, type Player } from './game.ts'
 import { connectRoom, type Role, type RoomConnection } from './net.ts'
 import { qrDataUrl } from './qr.ts'
-import { generateRoomId, normalizeRoomId } from './room.ts'
+import { gameInText, generateRoomId, normalizeRoomId, parseGame, type GameId } from './room.ts'
 import { lanHostMissing, shareUrl } from './share.ts'
 import './style.css'
 
@@ -14,26 +15,39 @@ function must<T extends Element>(element: T | null, name: string): T {
 
 const app = must(document.querySelector<HTMLElement>('#app'), '#app')
 
+function hostToken(game: GameId, roomId: string): string {
+  return `${game}:${roomId}`
+}
+
+function isStoredHost(game: GameId, roomId: string): boolean {
+  const stored = sessionStorage.getItem(HOST_KEY)
+  return stored === hostToken(game, roomId) || (game === 'four' && stored === roomId)
+}
+
 function boot(): void {
   const params = new URLSearchParams(location.search)
+  const game = parseGame(params.get('game'))
   const raw = params.get('id')
   if (raw === null) {
-    renderLobby()
+    renderLobby(game)
     return
   }
   const roomId = normalizeRoomId(raw)
   if (!roomId) {
-    renderLobby('Room codes are 4 letters or numbers.')
+    renderLobby(game, 'Room codes are 4 letters or numbers.')
     return
   }
-  const role: Role = sessionStorage.getItem(HOST_KEY) === roomId ? 'host' : 'guest'
-  renderMatch(roomId, role)
+  const role: Role = isStoredHost(game, roomId) ? 'host' : 'guest'
+  if (game === 'fight') renderFight(app, roomId, role, () => sessionStorage.removeItem(HOST_KEY))
+  else renderMatch(roomId, role)
 }
 
-function renderLobby(message = ''): void {
-  document.title = 'Connect Four — P2P Games'
+function renderLobby(selected: GameId, message = ''): void {
+  document.title = 'P2P Games'
+  let game = selected
   app.dataset.screen = 'lobby'
   app.dataset.connected = 'false'
+  app.dataset.game = game
   delete app.dataset.room
   app.replaceChildren()
 
@@ -41,8 +55,12 @@ function renderLobby(message = ''): void {
   wrap.className = 'wrap'
   wrap.innerHTML = `
     <p class="eyebrow">P2P Games</p>
-    <h1>Connect Four</h1>
-    <p class="lede">Play a friend in the browser. One of you starts a room and shares the code. The other joins it.</p>
+    <h1>Pick a game</h1>
+    <div class="picker" role="group" aria-label="Game">
+      <button type="button" id="pick-four" aria-pressed="false">Connect Four</button>
+      <button type="button" id="pick-fight" aria-pressed="false">Stick Fight</button>
+    </div>
+    <p class="lede" id="blurb"></p>
     <button type="button" class="primary" id="start">Start a game</button>
     <form id="join-form" class="join">
       <label for="code">Or join with a code</label>
@@ -54,22 +72,51 @@ function renderLobby(message = ''): void {
   app.append(wrap)
 
   const error = wrap.querySelector<HTMLElement>('#lobby-error')
+  const blurb = wrap.querySelector<HTMLElement>('#blurb')
+  const four = wrap.querySelector<HTMLButtonElement>('#pick-four')
+  const fight = wrap.querySelector<HTMLButtonElement>('#pick-fight')
   if (error && message) error.textContent = message
 
-  wrap.querySelector<HTMLButtonElement>('#start')?.addEventListener('click', () => {
-    const id = generateRoomId()
-    sessionStorage.setItem(HOST_KEY, id)
+  const showGame = () => {
+    app.dataset.game = game
+    if (four) four.setAttribute('aria-pressed', game === 'four' ? 'true' : 'false')
+    if (fight) fight.setAttribute('aria-pressed', game === 'fight' ? 'true' : 'false')
+    if (blurb) {
+      blurb.textContent = game === 'fight'
+        ? 'Side-view stick fight. Move, jump, punch, and kick. The host decides hits.'
+        : 'Drop discs, connect four. One of you starts a room and shares the code.'
+    }
+  }
+  four?.addEventListener('click', () => {
+    game = 'four'
+    showGame()
+  })
+  fight?.addEventListener('click', () => {
+    game = 'fight'
+    showGame()
+  })
+  showGame()
+
+  const go = (id: string, nextGame: GameId, hosting: boolean) => {
+    if (hosting) sessionStorage.setItem(HOST_KEY, hostToken(nextGame, id))
+    else sessionStorage.removeItem(HOST_KEY)
     const url = new URL(location.href)
     url.search = ''
     url.hash = ''
     url.searchParams.set('id', id)
+    url.searchParams.set('game', nextGame)
     location.assign(url.toString())
+  }
+
+  wrap.querySelector<HTMLButtonElement>('#start')?.addEventListener('click', () => {
+    go(generateRoomId(), game, true)
   })
 
   wrap.querySelector<HTMLFormElement>('#join-form')?.addEventListener('submit', (event) => {
     event.preventDefault()
     const input = wrap.querySelector<HTMLInputElement>('#code')
-    const id = normalizeRoomId(input?.value ?? '')
+    const raw = input?.value ?? ''
+    const id = normalizeRoomId(raw)
     if (!id) {
       if (error) {
         error.hidden = false
@@ -78,12 +125,7 @@ function renderLobby(message = ''): void {
       input?.focus()
       return
     }
-    sessionStorage.removeItem(HOST_KEY)
-    const url = new URL(location.href)
-    url.search = ''
-    url.hash = ''
-    url.searchParams.set('id', id)
-    location.assign(url.toString())
+    go(id, gameInText(raw) ?? game, false)
   })
 }
 
@@ -100,6 +142,7 @@ function renderMatch(roomId: string, role: Role): void {
   app.replaceChildren()
   app.dataset.room = roomId
   app.dataset.role = role
+  app.dataset.game = 'four'
   app.dataset.connected = 'false'
   app.dataset.screen = role === 'host' ? 'share' : 'joining'
 
@@ -149,7 +192,7 @@ function renderMatch(roomId: string, role: Role): void {
   you.textContent = me === 1 ? 'You are red' : 'You are yellow'
   you.dataset.player = String(me)
 
-  const url = shareUrl(roomId)
+  const url = shareUrl(roomId, 'four')
   const queryAt = url.indexOf('?')
   if (queryAt === -1) joinUrl.textContent = url
   else joinUrl.append(url.slice(0, queryAt), document.createElement('wbr'), url.slice(queryAt))

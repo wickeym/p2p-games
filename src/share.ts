@@ -1,3 +1,5 @@
+import type { GameId } from './room.ts'
+
 export function isLocalHostname(hostname: string): boolean {
   return (
     hostname === 'localhost' ||
@@ -23,16 +25,18 @@ export function buildShareUrl(
   loc: { protocol: string; hostname: string; host: string },
   lanHost: string,
   basePath: string,
+  game: GameId,
 ): string {
   const url = new URL(`${loc.protocol}//${loc.host}${normalizeBase(basePath)}`)
   if (isLocalHostname(loc.hostname) && lanHost) url.hostname = lanHost
   url.search = ''
   url.hash = ''
   url.searchParams.set('id', roomId)
+  url.searchParams.set('game', game)
   return url.toString()
 }
 
-export function shareUrl(roomId: string): string {
+export function shareUrl(roomId: string, game: GameId): string {
   return buildShareUrl(
     roomId,
     {
@@ -42,6 +46,7 @@ export function shareUrl(roomId: string): string {
     },
     __LAN_HOST__,
     import.meta.env.BASE_URL,
+    game,
   )
 }
 
