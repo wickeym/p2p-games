@@ -378,12 +378,16 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
       canvas.width = pixelW
       canvas.height = pixelH
     }
-    const scale = cssW / ARENA_W
-    const groundScreen = cssH - 108
-    const originY = groundScreen - GROUND * scale
-    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, originY * dpr)
-    const viewTop = -originY / scale
-    const viewBottom = (cssH - originY) / scale
+    const scaleX = cssW / ARENA_W
+    const groundPad = cssH < 360 ? 76 : 96
+    const skyPx = Math.max(1, cssH - groundPad)
+    const headWorld = 141
+    const scaleY = Math.min(scaleX, ((skyPx - 44) * 0.4) / headWorld)
+    const groundScreen = cssH - groundPad
+    const originY = groundScreen - GROUND * scaleY
+    ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, originY * dpr)
+    const viewTop = -originY / scaleY
+    const viewBottom = (cssH - originY) / scaleY
     const sky = ctx.createLinearGradient(0, viewTop, 0, GROUND)
     sky.addColorStop(0, '#24517a')
     sky.addColorStop(1, '#16324f')
@@ -397,8 +401,9 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     ctx.moveTo(-40, GROUND)
     ctx.lineTo(ARENA_W + 40, GROUND)
     ctx.stroke()
-    drawFighter(ctx, view.fighters[1], '#f5c400')
-    drawFighter(ctx, view.fighters[0], '#e10600')
+    const camera = { scaleX, scaleY, originY, dpr }
+    drawFighter(ctx, view.fighters[1], '#f5c400', camera)
+    drawFighter(ctx, view.fighters[0], '#e10600', camera)
   }
 
   function sendWorld(): void {
@@ -604,7 +609,23 @@ function limb(progress: number): number {
   return Math.sin(clamped * Math.PI)
 }
 
-function drawFighter(ctx: CanvasRenderingContext2D, fighter: Fighter, color: string): void {
+function drawFighter(
+  ctx: CanvasRenderingContext2D,
+  fighter: Fighter,
+  color: string,
+  camera: { scaleX: number; scaleY: number; originY: number; dpr: number },
+): void {
+  ctx.save()
+  const s = camera.scaleY * camera.dpr
+  ctx.setTransform(
+    s,
+    0,
+    0,
+    s,
+    fighter.x * camera.scaleX * camera.dpr,
+    camera.originY * camera.dpr + fighter.y * camera.scaleY * camera.dpr,
+  )
+  ctx.translate(-fighter.x, -fighter.y)
   const dir = fighter.facing
   const grounded = fighter.y >= GROUND - 2
   const crouched = fighter.crouch && grounded
@@ -671,4 +692,5 @@ function drawFighter(ctx: CanvasRenderingContext2D, fighter: Fighter, color: str
   ctx.ellipse(fighter.x, GROUND + 6, 22 - air * 6, 6, 0, 0, Math.PI * 2)
   ctx.fill()
   ctx.globalAlpha = 1
+  ctx.restore()
 }
