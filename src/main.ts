@@ -116,6 +116,13 @@ function renderLobby(selected: GameId, message = ''): void {
     url.hash = ''
     url.searchParams.set('id', id)
     url.searchParams.set('game', nextGame)
+    if (nextGame === 'fight') {
+      history.pushState(null, '', url.toString())
+      boot()
+      const root = document.documentElement
+      if (root.requestFullscreen) void root.requestFullscreen().catch(() => {})
+      return
+    }
     location.assign(url.toString())
   }
 

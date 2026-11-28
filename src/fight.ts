@@ -1,5 +1,4 @@
 import {
-  ARENA_H,
   ARENA_W,
   blankInput,
   createWorld,
@@ -360,23 +359,16 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     app.dataset.pose1 = poseOf(view.fighters[1])
     app.dataset.swing0 = String(swingOf(view.fighters[0]))
     app.dataset.leg0 = String(legOf(view.fighters[0]))
+    const fighting = connected && !portrait
+    wrap.classList.toggle('fighting', fighting)
     setLock(connected)
-    draw(view)
+    if (fighting) draw(view)
   }
 
   function draw(view: World): void {
-    const slot = canvas.parentElement
-    if (!slot) return
-    const availW = slot.clientWidth
-    const availH = slot.clientHeight
-    if (availW <= 0 || availH <= 0) return
-    const aspect = ARENA_W / ARENA_H
-    let cssW = availW
-    let cssH = cssW / aspect
-    if (cssH > availH) {
-      cssH = availH
-      cssW = cssH * aspect
-    }
+    const cssW = stage.clientWidth || window.innerWidth
+    const cssH = stage.clientHeight || window.innerHeight
+    if (cssW <= 0 || cssH <= 0) return
     canvas.style.width = `${cssW}px`
     canvas.style.height = `${cssH}px`
     const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -386,19 +378,24 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
       canvas.width = pixelW
       canvas.height = pixelH
     }
-    ctx.setTransform(pixelW / ARENA_W, 0, 0, pixelH / ARENA_H, 0, 0)
-    const sky = ctx.createLinearGradient(0, 0, 0, ARENA_H)
+    const scale = cssW / ARENA_W
+    const groundScreen = cssH - 108
+    const originY = groundScreen - GROUND * scale
+    ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, originY * dpr)
+    const viewTop = -originY / scale
+    const viewBottom = (cssH - originY) / scale
+    const sky = ctx.createLinearGradient(0, viewTop, 0, GROUND)
     sky.addColorStop(0, '#24517a')
-    sky.addColorStop(1, '#102033')
+    sky.addColorStop(1, '#16324f')
     ctx.fillStyle = sky
-    ctx.fillRect(0, 0, ARENA_W, ARENA_H)
+    ctx.fillRect(-40, viewTop, ARENA_W + 80, Math.max(0, GROUND - viewTop))
     ctx.fillStyle = '#1b2838'
-    ctx.fillRect(0, GROUND, ARENA_W, ARENA_H - GROUND)
+    ctx.fillRect(-40, GROUND, ARENA_W + 80, Math.max(0, viewBottom - GROUND))
     ctx.strokeStyle = '#8fb4d6'
     ctx.lineWidth = 4
     ctx.beginPath()
-    ctx.moveTo(0, GROUND)
-    ctx.lineTo(ARENA_W, GROUND)
+    ctx.moveTo(-40, GROUND)
+    ctx.lineTo(ARENA_W + 40, GROUND)
     ctx.stroke()
     drawFighter(ctx, view.fighters[1], '#f5c400')
     drawFighter(ctx, view.fighters[0], '#e10600')
@@ -526,8 +523,16 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
   const blockGesture = (event: Event) => {
     if (document.documentElement.classList.contains('fight-lock')) event.preventDefault()
   }
+  const tryFullscreen = () => {
+    if (stage.hidden) return
+    const root = document.documentElement
+    if (document.fullscreenElement || !root.requestFullscreen) return
+    void root.requestFullscreen().catch(() => {})
+  }
   const onResize = () => paint()
   window.addEventListener('resize', onResize)
+  stage.addEventListener('pointerdown', tryFullscreen)
+  window.addEventListener('keydown', tryFullscreen)
   document.addEventListener('touchmove', blockScroll, { passive: false })
   document.addEventListener('gesturestart', blockGesture)
 
@@ -536,6 +541,8 @@ export function renderFight(app: HTMLElement, roomId: string, role: Role, clearH
     window.removeEventListener('keydown', keyDown)
     window.removeEventListener('keyup', keyUp)
     window.removeEventListener('resize', onResize)
+    window.removeEventListener('keydown', tryFullscreen)
+    wrap.classList.remove('fighting')
     document.removeEventListener('touchmove', blockScroll)
     document.removeEventListener('gesturestart', blockGesture)
     setLock(false)

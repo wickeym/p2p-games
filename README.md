@@ -38,7 +38,7 @@ If macOS Firewall is on, allow incoming connections to Node when a phone cannot 
 
 ## Stick Fight
 
-Side-view, two stick figures, played in landscape. A phone held upright is asked to rotate. The arena sits between a joystick and three round buttons, so the controls are not on top of the fighters. Hold the joystick to walk, and pull it down to crouch. Jump once from the ground and once more in the air. Punch and kick from a crouch are shorter and lower. Keyboard: arrows or WASD, Down or S to crouch, J punch, K kick. Motion syncs to the other player. The host decides when a hit lands and who won the round. A round ends at 0 health or after 45 seconds. Rematch stays in the same room.
+Side-view, two stick figures, played in landscape. A phone held upright is asked to rotate. The arena fills the screen. Thin health bars sit on the top corners. The joystick stays at the bottom left (pull down to crouch) and jump, punch, and kick are a small cluster at the bottom right. Jump once from the ground and once more in the air. Punch and kick from a crouch are shorter and lower. Keyboard: arrows or WASD, Down or S to crouch, J punch, K kick. Motion syncs to the other player. The host decides when a hit lands and who won the round. A round ends at 0 health or after 45 seconds. Rematch stays in the same room.
 
 The host's PeerJS id is prefixed with `p2pgames-fight-` so it does not collide with a Connect Four room (`p2pgames-four-`) or a chess room (`p2pgames-chess-`) that happens to use the same code.
 
